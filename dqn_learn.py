@@ -226,6 +226,9 @@ def dqn_learing(
             optimizer.zero_grad()
             Q.backward(err.data.unsqueeze(1))
             optimizer.step()
+        num_param_updates += 1
+        if num_param_updates % target_update_freq == 0:
+            Q_target.load_state_dict(Q.state_dict())
         ### 4. Log progress and keep track of statistics
         episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
         if len(episode_rewards) > 0:
