@@ -193,61 +193,61 @@ def dqn_learing(
                 t % learning_freq == 0 and
                 replay_buffer.can_sample(batch_size)):
 
-        # Here, you should perform training. Training consists of four steps:
-        # 3.a: use the replay buffer to sample a batch of transitions (see the
-        # replay buffer code for function definition, each batch that you sample
-        # should consist of current observations, current actions, rewards,
-        # next observations, and done indicator).
-        # Note: Move the variables to the GPU if avialable
-        # 3.b: fill in your own code to compute the Bellman error. This requires
-        # evaluating the current and next Q-values and constructing the corresponding error.
-        # Note: don't forget to clip the error between [-1,1], multiply is by -1 (since pytorch minimizes) and
-        #       maskout post terminal status Q-values (see ReplayBuffer code).
-        # 3.c: train the model. To do this, use the bellman error you calculated perviously.
-        # Pytorch will differentiate this error for you, to backward the error use the following API:
-        #       current.backward(d_error.data.unsqueeze(1))
-        # Where "current" is the variable holding current Q Values and d_error is the clipped bellman error.
-        # Your code should produce one scalar-valued tensor.
-        # Note: don't forget to call optimizer.zero_grad() before the backward call and
-        #       optimizer.step() after the backward call.
-        # 3.d: periodically update the target network by loading the current Q network weights into the
-        #      target_Q network. see state_dict() and load_state_dict() methods.
-        #      you should update every target_update_freq steps, and you may find the
-        #      variable num_param_updates useful for this (it was initialized to 0)
-        obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = replay_buffer.sample(batch_size)
-        for i in range(batch_size):
-            obs, action, reward, next_obs, is_done = obs_batch[i], act_batch[i], rew_batch[i], \
-                                                     next_obs_batch[i], done_mask[i]
-            # TODO: understand if we need to skip these obs
-            if is_done:
-                continue
-            err = reward + gamma * np.max(Q_target(next_obs), axis=1)[1] - Q(obs)[action][1]
-            # TODO: understand if we pass learning rate
-            optimizer.zero_grad()
-            Q.backward(err.data.unsqueeze(1))
-            optimizer.step()
-        num_param_updates += 1
-        if num_param_updates % target_update_freq == 0:
-            Q_target.load_state_dict(Q.state_dict())
-        ### 4. Log progress and keep track of statistics
-        episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
-        if len(episode_rewards) > 0:
-            mean_episode_reward = np.mean(episode_rewards[-100:])
-        if len(episode_rewards) > 100:
-            best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
+            # Here, you should perform training. Training consists of four steps:
+            # 3.a: use the replay buffer to sample a batch of transitions (see the
+            # replay buffer code for function definition, each batch that you sample
+            # should consist of current observations, current actions, rewards,
+            # next observations, and done indicator).
+            # Note: Move the variables to the GPU if avialable
+            # 3.b: fill in your own code to compute the Bellman error. This requires
+            # evaluating the current and next Q-values and constructing the corresponding error.
+            # Note: don't forget to clip the error between [-1,1], multiply is by -1 (since pytorch minimizes) and
+            #       maskout post terminal status Q-values (see ReplayBuffer code).
+            # 3.c: train the model. To do this, use the bellman error you calculated perviously.
+            # Pytorch will differentiate this error for you, to backward the error use the following API:
+            #       current.backward(d_error.data.unsqueeze(1))
+            # Where "current" is the variable holding current Q Values and d_error is the clipped bellman error.
+            # Your code should produce one scalar-valued tensor.
+            # Note: don't forget to call optimizer.zero_grad() before the backward call and
+            #       optimizer.step() after the backward call.
+            # 3.d: periodically update the target network by loading the current Q network weights into the
+            #      target_Q network. see state_dict() and load_state_dict() methods.
+            #      you should update every target_update_freq steps, and you may find the
+            #      variable num_param_updates useful for this (it was initialized to 0)
+            obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = replay_buffer.sample(batch_size)
+            for i in range(batch_size):
+                obs, action, reward, next_obs, is_done = obs_batch[i], act_batch[i], rew_batch[i], \
+                                                         next_obs_batch[i], done_mask[i]
+                # TODO: understand if we need to skip these obs
+                if is_done:
+                    continue
+                err = reward + gamma * np.max(Q_target(next_obs), axis=1)[1] - Q(obs)[action][1]
+                # TODO: understand if we pass learning rate
+                optimizer.zero_grad()
+                Q.backward(err.data.unsqueeze(1))
+                optimizer.step()
+            num_param_updates += 1
+            if num_param_updates % target_update_freq == 0:
+                Q_target.load_state_dict(Q.state_dict())
+            ### 4. Log progress and keep track of statistics
+            episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
+            if len(episode_rewards) > 0:
+                mean_episode_reward = np.mean(episode_rewards[-100:])
+            if len(episode_rewards) > 100:
+                best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
 
-        Statistic["mean_episode_rewards"].append(mean_episode_reward)
-        Statistic["best_mean_episode_rewards"].append(best_mean_episode_reward)
+            Statistic["mean_episode_rewards"].append(mean_episode_reward)
+            Statistic["best_mean_episode_rewards"].append(best_mean_episode_reward)
 
-        if t % LOG_EVERY_N_STEPS == 0 and t > learning_starts:
-            print("Timestep %d" % (t,))
-            print("mean reward (100 episodes) %f" % mean_episode_reward)
-            print("best mean reward %f" % best_mean_episode_reward)
-            print("episodes %d" % len(episode_rewards))
-            print("exploration %f" % exploration.value(t))
-            sys.stdout.flush()
+            if t % LOG_EVERY_N_STEPS == 0 and t > learning_starts:
+                print("Timestep %d" % (t,))
+                print("mean reward (100 episodes) %f" % mean_episode_reward)
+                print("best mean reward %f" % best_mean_episode_reward)
+                print("episodes %d" % len(episode_rewards))
+                print("exploration %f" % exploration.value(t))
+                sys.stdout.flush()
 
-            # Dump statistics to pickle
-            with open('statistics.pkl', 'wb') as f:
-                pickle.dump(Statistic, f)
-                print("Saved to %s" % 'statistics.pkl')
+                # Dump statistics to pickle
+                with open('statistics.pkl', 'wb') as f:
+                    pickle.dump(Statistic, f)
+                    print("Saved to %s" % 'statistics.pkl')
