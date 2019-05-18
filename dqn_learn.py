@@ -118,13 +118,21 @@ def dqn_learing(
         if sample > eps_threshold:
             obs = torch.from_numpy(obs).type(dtype).unsqueeze(0) / 255.0
             # Use volatile = True if variable is only used in inference mode, i.e. don’t save the history
-            return model(Variable(obs, volatile=True)).data.max(1)[1].cpu()
+            with torch.no_grad():
+                return model(Variable(obs)).data.max(1)[1].cpu()
         else:
             return torch.IntTensor([[random.randrange(num_actions)]])
 
     # Initialize target q function and q function, i.e. build the model.
+    # region Part 1
     Q = q_func(input_arg, num_actions)
     Q_target = q_func(input_arg, num_actions)
+
+    if USE_CUDA:
+        Q = Q.cuda()
+        Q_target = Q_target.cuda()
+    # endregion
+
     # Construct Q network optimizer function
     optimizer = optimizer_spec.constructor(Q.parameters(), **optimizer_spec.kwargs)
 
@@ -174,6 +182,7 @@ def dqn_learing(
         # And remember that the first time you enter this loop, the model
         # may not yet have been initialized (but of course, the first step
         # might as well be random, since you haven't trained your net...)
+        # region Part 2
         replay_buffer_idx = replay_buffer.store_frame(last_obs)
         network_obs = replay_buffer.encode_recent_observation()
         action = select_epilson_greedy_action(Q, network_obs, t)
@@ -181,6 +190,7 @@ def dqn_learing(
         replay_buffer.store_effect(replay_buffer_idx, action, reward, done)
         if done:
             last_obs = env.reset()
+        # endregion
         # at this point, the environment should have been advanced one step (and
         # reset if done was true), and last_obs should point to the new latest
         # observation
@@ -214,6 +224,8 @@ def dqn_learing(
             #      target_Q network. see state_dict() and load_state_dict() methods.
             #      you should update every target_update_freq steps, and you may find the
             #      variable num_param_updates useful for this (it was initialized to 0)
+
+            # region Part 3
             obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = replay_buffer.sample(batch_size)
             for i in range(batch_size):
                 obs, action, reward, next_obs, is_done = obs_batch[i], act_batch[i], rew_batch[i], \
@@ -229,6 +241,7 @@ def dqn_learing(
             num_param_updates += 1
             if num_param_updates % target_update_freq == 0:
                 Q_target.load_state_dict(Q.state_dict())
+            # endregion
             ### 4. Log progress and keep track of statistics
             episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
             if len(episode_rewards) > 0:
