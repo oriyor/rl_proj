@@ -28,6 +28,14 @@ class Variable(autograd.Variable):
         super(Variable, self).__init__(data, *args, **kwargs)
 
 
+def convert_to_dqn_input(data):
+    if isinstance(data, np.ndarray):
+        data = torch.from_numpy(data).type(dtype).unsqueeze(0) / 255.0
+    if USE_CUDA:
+        data = data.cuda()
+    return autograd.Variable(data)
+
+
 """
     OptimizerSpec containing following attributes
         constructor: The optimizer constructor ex: RMSprop
@@ -199,9 +207,7 @@ def dqn_learing(
         # Note that this is only done if the replay buffer contains enough samples
         # for us to learn something useful -- until then, the model will not be
         # initialized and random actions should be taken
-        if (t > learning_starts and
-                t % learning_freq == 0 and
-                replay_buffer.can_sample(batch_size)):
+        if t > learning_starts and t % learning_freq == 0 and replay_buffer.can_sample(batch_size):
 
             # Here, you should perform training. Training consists of four steps:
             # 3.a: use the replay buffer to sample a batch of transitions (see the
@@ -233,7 +239,8 @@ def dqn_learing(
                 # TODO: understand if we need to skip these obs
                 if is_done:
                     continue
-                err = reward + gamma * np.max(Q_target(next_obs), axis=1)[1] - Q(obs)[action][1]
+                err = reward + gamma * torch.max(Q_target(convert_to_dqn_input(next_obs))) \
+                      - Q(convert_to_dqn_input(obs))[0, action]
                 # TODO: understand if we pass learning rate
                 optimizer.zero_grad()
                 Q.backward(err.data.unsqueeze(1))
