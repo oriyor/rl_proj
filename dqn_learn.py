@@ -246,16 +246,17 @@ def dqn_learing(
             done_mask = convert_to_tensor(done_mask.astype(bool))
 
             # calculate err
-            curr_q = Q(obs_batch).gather(1, act_batch.unsqueeze(1))
+            curr_q = Q(obs_batch).gather(1, act_batch.long().unsqueeze(1))
             next_q = rew_batch
             with autograd.no_grad():
-                max_next_q = Q_target(next_obs_batch[done_mask == False]).max(dim=1)[0]
+                max_next_q = Q_target(next_obs_batch).max(dim=1)[0][done_mask == False]
             next_q[done_mask == False] += (gamma * max_next_q)
-            err = (next_q - curr_q).clamp(-1, 1) * -1
+            err = (next_q.unsqueeze(1) - curr_q).clamp(-1, 1) * -1.0
+
 
             # back prop error
             optimizer.zero_grad()
-            curr_q.backward(err.data.unsqueeze(1))
+            curr_q.backward(err.data)
             optimizer.step()
 
             # update target logic
