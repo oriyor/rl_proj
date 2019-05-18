@@ -28,12 +28,16 @@ class Variable(autograd.Variable):
         super(Variable, self).__init__(data, *args, **kwargs)
 
 
-def convert_to_dqn_input(data):
+def convert_to_tensor(data):
     if isinstance(data, np.ndarray):
-        data = torch.from_numpy(data).type(dtype).unsqueeze(0) / 255.0
+        data = torch.from_numpy(data)
     if USE_CUDA:
         data = data.cuda()
-    return autograd.Variable(data)
+    return Variable(data)
+
+
+def convert_to_dqn_input(data):
+    return Variable(convert_to_tensor(data).type(dtype) / 255.0)
 
 
 """
@@ -233,18 +237,28 @@ def dqn_learing(
 
             # region Part 3
             obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = replay_buffer.sample(batch_size)
-            for i in range(batch_size):
-                obs, action, reward, next_obs, is_done = obs_batch[i], act_batch[i], rew_batch[i], \
-                                                         next_obs_batch[i], done_mask[i]
-                # TODO: understand if we need to skip these obs
-                if is_done:
-                    continue
-                err = reward + gamma * torch.max(Q_target(convert_to_dqn_input(next_obs))) \
-                      - Q(convert_to_dqn_input(obs))[0, action]
-                # TODO: understand if we pass learning rate
-                optimizer.zero_grad()
-                Q.backward(err.data.unsqueeze(1))
-                optimizer.step()
+
+            # convert to the right tensors
+            obs_batch = convert_to_dqn_input(obs_batch)
+            act_batch = convert_to_tensor(act_batch)
+            rew_batch = convert_to_tensor(rew_batch)
+            next_obs_batch = convert_to_dqn_input(next_obs_batch)
+            done_mask = convert_to_tensor(done_mask.astype(bool))
+
+            # calculate err
+            curr_q = Q(obs_batch).gather(1, act_batch.unsqueeze(1))
+            next_q = rew_batch
+            with autograd.no_grad():
+                max_next_q = Q_target(next_obs_batch[done_mask == False]).max(dim=1)[0]
+            next_q[done_mask == False] += (gamma * max_next_q)
+            err = (next_q - curr_q).clamp(-1, 1) * -1
+
+            # back prop error
+            optimizer.zero_grad()
+            curr_q.backward(err.data.unsqueeze(1))
+            optimizer.step()
+
+            # update target logic
             num_param_updates += 1
             if num_param_updates % target_update_freq == 0:
                 Q_target.load_state_dict(Q.state_dict())
