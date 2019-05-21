@@ -2,7 +2,10 @@
     This file is copied/apdated from https://github.com/berkeleydeeprlcourse/homework/tree/master/hw3
 """
 import sys
+import os
 import pickle
+import json
+import datetime
 import numpy as np
 from collections import namedtuple
 from itertools import count
@@ -38,6 +41,23 @@ def convert_to_tensor(data):
 
 def convert_to_dqn_input(data):
     return Variable(convert_to_tensor(data).type(dtype) / 255.0)
+
+
+def write_statistics(sub_dir, stats, config):
+    run_path = os.path.join(os.getcwd(), 'runs', sub_dir)
+    os.makedirs(run_path, exist_ok=True)
+
+    config_name = 'config.txt'
+    if not os.path.isfile(os.path.join(run_path, config_name)):
+        with open(os.path.join(run_path, config_name), 'w') as f:
+            json.dump(str(config), f)
+            print("Saved config to %s" % os.path.join(run_path, config_name))
+
+    # Dump statistics to pickle
+    stats_name = 'statistics.pkl'
+    with open(os.path.join(run_path, stats_name), 'wb') as f:
+        pickle.dump(stats, f)
+        print("Saved stats to %s" % os.path.join(run_path, stats_name))
 
 
 """
@@ -122,6 +142,8 @@ def dqn_learing(
         img_h, img_w, img_c = env.observation_space.shape
         input_arg = frame_history_len * img_c
     num_actions = env.action_space.n
+
+    current_time_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
     # Construct an epilson greedy policy with given exploration schedule
     def select_epilson_greedy_action(model, obs, t):
@@ -253,7 +275,6 @@ def dqn_learing(
             next_q[done_mask == False] += (gamma * max_next_q)
             err = (next_q.unsqueeze(1) - curr_q).clamp(-1, 1) * -1.0
 
-
             # back prop error
             optimizer.zero_grad()
             curr_q.backward(err.data)
@@ -264,6 +285,7 @@ def dqn_learing(
             if num_param_updates % target_update_freq == 0:
                 Q_target.load_state_dict(Q.state_dict())
             # endregion
+
             ### 4. Log progress and keep track of statistics
             episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
             if len(episode_rewards) > 0:
@@ -282,7 +304,13 @@ def dqn_learing(
                 print("exploration %f" % exploration.value(t))
                 sys.stdout.flush()
 
-                # Dump statistics to pickle
-                with open('statistics.pkl', 'wb') as f:
-                    pickle.dump(Statistic, f)
-                    print("Saved to %s" % 'statistics.pkl')
+                write_statistics(current_time_str, Statistic, [optimizer_spec,
+                                                               exploration,
+                                                               stopping_criterion,
+                                                               replay_buffer_size,
+                                                               batch_size,
+                                                               gamma,
+                                                               learning_starts,
+                                                               learning_freq,
+                                                               frame_history_len,
+                                                               target_update_freq])
