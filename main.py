@@ -72,7 +72,7 @@ def test_scheduler_history(num_timesteps):
     schedulers = {"linear": LinearSchedule(1000000, 0.1),
                   "const": ConstantSchedule(0.05),
                   "non": ConstantSchedule(0.0),
-                  "piecewise": PiecewiseSchedule([(0.5e6, 0.1), (1e6, 0.75), (1.5e6, 0.05), (2e6, 0.025), (3e6, 0.001)],
+                  "piecewise": PiecewiseSchedule([(0.5e6, 0.1), (1e6, 0.075), (1.5e6, 0.05), (2e6, 0.025), (3e6, 0.001)],
                                                  outside_value=0)}
     for name, exploration_schedule in schedulers.items():
         # Get Atari games.
