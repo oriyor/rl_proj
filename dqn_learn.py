@@ -145,6 +145,8 @@ def dqn_learning(
         input_arg = frame_history_len * img_c
     num_actions = env.action_space.n
 
+    current_time_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+
     # Construct an epilson greedy policy with given exploration schedule
     def select_epilson_greedy_action(model, obs, t):
         sample = random.random()
@@ -304,13 +306,13 @@ def dqn_learning(
                 print("exploration %f" % exploration.value(t))
                 sys.stdout.flush()
 
-                write_statistics(runname, Statistic, [optimizer_spec,
-                                                      exploration,
-                                                      stopping_criterion,
-                                                      replay_buffer_size,
-                                                      batch_size,
-                                                      gamma,
-                                                      learning_starts,
-                                                      learning_freq,
-                                                      frame_history_len,
-                                                      target_update_freq])
+            write_statistics(runname, Statistic, [optimizer_spec,
+                                                  exploration,
+                                                  stopping_criterion,
+                                                  replay_buffer_size,
+                                                  batch_size,
+                                                  gamma,
+                                                  learning_starts,
+                                                  learning_freq,
+                                                  frame_history_len,
+                                                  target_update_freq])
