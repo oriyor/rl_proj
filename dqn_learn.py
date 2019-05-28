@@ -67,11 +67,6 @@ def write_statistics(sub_dir, stats, config):
 """
 OptimizerSpec = namedtuple("OptimizerSpec", ["constructor", "kwargs"])
 
-Statistic = {
-    "mean_episode_rewards": [],
-    "best_mean_episode_rewards": []
-}
-
 
 def dqn_learning(
         env,
@@ -132,6 +127,11 @@ def dqn_learning(
     assert type(env.observation_space) == gym.spaces.Box
     assert type(env.action_space) == gym.spaces.Discrete
 
+    Statistic = {
+        "t": [],
+        "mean_episode_rewards": [],
+        "best_mean_episode_rewards": []
+    }
 
     ###############
     # BUILD MODEL #
@@ -295,6 +295,7 @@ def dqn_learning(
             if len(episode_rewards) > 100:
                 best_mean_episode_reward = max(best_mean_episode_reward, mean_episode_reward)
 
+            Statistic["t"].append(t)
             Statistic["mean_episode_rewards"].append(mean_episode_reward)
             Statistic["best_mean_episode_rewards"].append(best_mean_episode_reward)
 
@@ -306,13 +307,13 @@ def dqn_learning(
                 print("exploration %f" % exploration.value(t))
                 sys.stdout.flush()
 
-            write_statistics(runname, Statistic, [optimizer_spec,
-                                                  exploration,
-                                                  stopping_criterion,
-                                                  replay_buffer_size,
-                                                  batch_size,
-                                                  gamma,
-                                                  learning_starts,
-                                                  learning_freq,
-                                                  frame_history_len,
-                                                  target_update_freq])
+                write_statistics(runname, Statistic, [optimizer_spec,
+                                                      exploration,
+                                                      stopping_criterion,
+                                                      replay_buffer_size,
+                                                      batch_size,
+                                                      gamma,
+                                                      learning_starts,
+                                                      learning_freq,
+                                                      frame_history_len,
+                                                      target_update_freq])
