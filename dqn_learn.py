@@ -2,7 +2,10 @@
     This file is copied/apdated from https://github.com/berkeleydeeprlcourse/homework/tree/master/hw3
 """
 import sys
+import os
 import pickle
+import json
+import datetime
 import numpy as np
 from collections import namedtuple
 from itertools import count
@@ -28,6 +31,35 @@ class Variable(autograd.Variable):
         super(Variable, self).__init__(data, *args, **kwargs)
 
 
+def convert_to_tensor(data):
+    if isinstance(data, np.ndarray):
+        data = torch.from_numpy(data)
+    if USE_CUDA:
+        data = data.cuda()
+    return Variable(data)
+
+
+def convert_to_dqn_input(data):
+    return Variable(convert_to_tensor(data).type(dtype) / 255.0)
+
+
+def write_statistics(sub_dir, stats, config):
+    run_path = os.path.join(os.getcwd(), 'runs', sub_dir)
+    os.makedirs(run_path, exist_ok=True)
+
+    config_name = 'config.txt'
+    if not os.path.isfile(os.path.join(run_path, config_name)):
+        with open(os.path.join(run_path, config_name), 'w') as f:
+            json.dump(str(config), f)
+            print("Saved config to %s" % os.path.join(run_path, config_name))
+
+    # Dump statistics to pickle
+    stats_name = 'statistics.pkl'
+    with open(os.path.join(run_path, stats_name), 'wb') as f:
+        pickle.dump(stats, f)
+        print("Saved stats to %s" % os.path.join(run_path, stats_name))
+
+
 """
     OptimizerSpec containing following attributes
         constructor: The optimizer constructor ex: RMSprop
@@ -41,11 +73,12 @@ Statistic = {
 }
 
 
-def dqn_learing(
+def dqn_learning(
         env,
         q_func,
         optimizer_spec,
         exploration,
+        runname,
         stopping_criterion=None,
         replay_buffer_size=1000000,
         batch_size=32,
@@ -99,6 +132,7 @@ def dqn_learing(
     assert type(env.observation_space) == gym.spaces.Box
     assert type(env.action_space) == gym.spaces.Discrete
 
+
     ###############
     # BUILD MODEL #
     ###############
@@ -110,6 +144,8 @@ def dqn_learing(
         img_h, img_w, img_c = env.observation_space.shape
         input_arg = frame_history_len * img_c
     num_actions = env.action_space.n
+
+    current_time_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
     # Construct an epilson greedy policy with given exploration schedule
     def select_epilson_greedy_action(model, obs, t):
@@ -150,7 +186,7 @@ def dqn_learing(
 
     for t in count():
         ### 1. Check stopping criterion
-        if stopping_criterion is not None and stopping_criterion(env):
+        if stopping_criterion is not None and stopping_criterion(t):
             break
 
         ### 2. Step the env and store the transition
@@ -199,9 +235,7 @@ def dqn_learing(
         # Note that this is only done if the replay buffer contains enough samples
         # for us to learn something useful -- until then, the model will not be
         # initialized and random actions should be taken
-        if (t > learning_starts and
-                t % learning_freq == 0 and
-                replay_buffer.can_sample(batch_size)):
+        if t > learning_starts and t % learning_freq == 0 and replay_buffer.can_sample(batch_size):
 
             # Here, you should perform training. Training consists of four steps:
             # 3.a: use the replay buffer to sample a batch of transitions (see the
@@ -227,21 +261,33 @@ def dqn_learing(
 
             # region Part 3
             obs_batch, act_batch, rew_batch, next_obs_batch, done_mask = replay_buffer.sample(batch_size)
-            for i in range(batch_size):
-                obs, action, reward, next_obs, is_done = obs_batch[i], act_batch[i], rew_batch[i], \
-                                                         next_obs_batch[i], done_mask[i]
-                # TODO: understand if we need to skip these obs
-                if is_done:
-                    continue
-                err = reward + gamma * np.max(Q_target(next_obs), axis=1)[1] - Q(obs)[action][1]
-                # TODO: understand if we pass learning rate
-                optimizer.zero_grad()
-                Q.backward(err.data.unsqueeze(1))
-                optimizer.step()
+
+            # convert to the right tensors
+            obs_batch = convert_to_dqn_input(obs_batch)
+            act_batch = convert_to_tensor(act_batch)
+            rew_batch = convert_to_tensor(rew_batch)
+            next_obs_batch = convert_to_dqn_input(next_obs_batch)
+            done_mask = convert_to_tensor(done_mask.astype(bool))
+
+            # calculate err
+            curr_q = Q(obs_batch).gather(1, act_batch.long().unsqueeze(1))
+            next_q = rew_batch
+            with autograd.no_grad():
+                max_next_q = Q_target(next_obs_batch).max(dim=1)[0][done_mask == False]
+            next_q[done_mask == False] += (gamma * max_next_q)
+            err = (next_q.unsqueeze(1) - curr_q).clamp(-1, 1) * -1.0
+
+            # back prop error
+            optimizer.zero_grad()
+            curr_q.backward(err.data)
+            optimizer.step()
+
+            # update target logic
             num_param_updates += 1
             if num_param_updates % target_update_freq == 0:
                 Q_target.load_state_dict(Q.state_dict())
             # endregion
+
             ### 4. Log progress and keep track of statistics
             episode_rewards = get_wrapper_by_name(env, "Monitor").get_episode_rewards()
             if len(episode_rewards) > 0:
@@ -260,7 +306,13 @@ def dqn_learing(
                 print("exploration %f" % exploration.value(t))
                 sys.stdout.flush()
 
-                # Dump statistics to pickle
-                with open('statistics.pkl', 'wb') as f:
-                    pickle.dump(Statistic, f)
-                    print("Saved to %s" % 'statistics.pkl')
+            write_statistics(runname, Statistic, [optimizer_spec,
+                                                  exploration,
+                                                  stopping_criterion,
+                                                  replay_buffer_size,
+                                                  batch_size,
+                                                  gamma,
+                                                  learning_starts,
+                                                  learning_freq,
+                                                  frame_history_len,
+                                                  target_update_freq])
