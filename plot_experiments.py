@@ -6,7 +6,7 @@ RESULTS_PATH = r"./runs"
 TARGET_PATH = r"./experiment_plots"
 
 for dir_name in os.listdir(RESULTS_PATH):
-    with open(os.path.join(RESULTS_PATH, "statistics.pkl"), "rb") as f:
+    with open(os.path.join(RESULTS_PATH, dir_name, "statistics.pkl"), "rb") as f:
         results = pickle.load(f)
         for values_title, values in results.items():
             if values_title == "t":
