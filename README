@@ -1,0 +1,3 @@
+To run:
+python3 main.py run_type
+Where run_type is an argument accepting values "q1", "q2", "bonus".

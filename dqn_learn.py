@@ -74,6 +74,7 @@ def dqn_learning(
         optimizer_spec,
         exploration,
         runname,
+        frame_filter = None,
         stopping_criterion=None,
         replay_buffer_size=1000000,
         batch_size=32,
@@ -144,8 +145,6 @@ def dqn_learning(
         img_h, img_w, img_c = env.observation_space.shape
         input_arg = frame_history_len * img_c
     num_actions = env.action_space.n
-
-    current_time_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
     # Construct an epilson greedy policy with given exploration schedule
     def select_epilson_greedy_action(model, obs, t):
@@ -219,6 +218,8 @@ def dqn_learning(
         # may not yet have been initialized (but of course, the first step
         # might as well be random, since you haven't trained your net...)
         # region Part 2
+        if frame_filter is not None:
+            frame_filter(last_obs)
         replay_buffer_idx = replay_buffer.store_frame(last_obs)
         network_obs = replay_buffer.encode_recent_observation()
         action = select_epilson_greedy_action(Q, network_obs, t)

@@ -1,7 +1,8 @@
-import datetime
+import sys
 
 import gym
 import torch.optim as optim
+import numpy as np
 
 from dqn_model import DQN
 from dqn_learn import OptimizerSpec, dqn_learning
@@ -32,123 +33,17 @@ def stopping_criterion2(num_timesteps):
     return lambda t: t >= num_timesteps
 
 
-def test_frame_history(num_timesteps, frame_lst=[1, 4, 10, 100]):
-    for frame in frame_lst:
-        # Get Atari games.
-        benchmark = gym.benchmark_spec('Atari40M')
+def q1_run(num_timesteps):
+    # Get Atari games.
+    benchmark = gym.benchmark_spec('Atari40M')
 
-        # Change the index to select a different game.
-        task = benchmark.tasks[3]
+    # Change the index to select a different game.
+    task = benchmark.tasks[3]
 
-        # Run training
-        seed = 0  # Use a seed of zero (you may want to randomize the seed!)
-        env = get_env(task, seed)
-        env.reset()
+    # Run training
+    seed = 0  # Use a seed of zero (you may want to randomize the seed!)
+    env = get_env(task, seed, expt_dir='tmp/gym-results2')
 
-        runname = "test_frame_" + str(frame) + "_" + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-
-        optimizer_spec = OptimizerSpec(constructor=optim.RMSprop, kwargs=dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS))
-
-        exploration_schedule = LinearSchedule(1000000, 0.1)
-
-        dqn_learning(
-            env=env,
-            q_func=DQN,
-            runname=runname,
-            optimizer_spec=optimizer_spec,
-            exploration=exploration_schedule,
-            stopping_criterion=stopping_criterion2(num_timesteps),
-            replay_buffer_size=REPLAY_BUFFER_SIZE,
-            batch_size=BATCH_SIZE,
-            gamma=GAMMA,
-            learning_starts=LEARNING_STARTS,
-            learning_freq=LEARNING_FREQ,
-            frame_history_len=frame,
-            target_update_freq=TARGET_UPDATE_FREQ
-        )
-
-
-def test_scheduler_history(num_timesteps):
-    schedulers = {"linear": LinearSchedule(1000000, 0.1),
-                  "const": ConstantSchedule(0.05),
-                  "non": ConstantSchedule(0.0),
-                  "piecewise": PiecewiseSchedule(
-                      [(0.5e6, 0.1), (1e6, 0.075), (1.5e6, 0.05), (2e6, 0.025), (3e6, 0.001)],
-                      outside_value=0)}
-    for name, exploration_schedule in schedulers.items():
-        # Get Atari games.
-        benchmark = gym.benchmark_spec('Atari40M')
-
-        # Change the index to select a different game.
-        task = benchmark.tasks[3]
-
-        # Run training
-        seed = 0  # Use a seed of zero (you may want to randomize the seed!)
-        env = get_env(task, seed)
-        env.reset()
-
-        runname = "test_scheduler_" + str(name) + "_" + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-
-        optimizer_spec = OptimizerSpec(constructor=optim.RMSprop, kwargs=dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS))
-
-        dqn_learning(
-            env=env,
-            q_func=DQN,
-            runname=runname,
-            optimizer_spec=optimizer_spec,
-            exploration=exploration_schedule,
-            stopping_criterion=stopping_criterion2(num_timesteps),
-            replay_buffer_size=REPLAY_BUFFER_SIZE,
-            batch_size=BATCH_SIZE,
-            gamma=GAMMA,
-            learning_starts=LEARNING_STARTS,
-            learning_freq=LEARNING_FREQ,
-            frame_history_len=FRAME_HISTORY_LEN,
-            target_update_freq=TARGET_UPDATE_FREQ
-        )
-
-
-def test_optimizer(num_timesteps):
-    optimizers = [("RMSProp", optim.RMSprop, dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS)),
-                  ("Adam_1e-4", optim.Adam, dict(lr=1e-4)),
-                  ("Adam_1e-3", optim.Adam, dict(lr=1e-3)),
-                  ("SGD", optim.SGD, dict(lr=1e-3))]
-    for optimizer_name, optimizer, optim_kwargs in optimizers.items():
-        # Get Atari games.
-        benchmark = gym.benchmark_spec('Atari40M')
-
-        # Change the index to select a different game.
-        task = benchmark.tasks[3]
-
-        # Run training
-        seed = 0  # Use a seed of zero (you may want to randomize the seed!)
-        env = get_env(task, seed)
-        env.reset()
-
-        runname = "test_scheduler_" + str(optimizer_name) + "_" + datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-
-        optimizer_spec = OptimizerSpec(constructor=optimizer, kwargs=optim_kwargs)
-
-        exploration_schedule = LinearSchedule(1000000, 0.1)
-
-        dqn_learning(
-            env=env,
-            q_func=DQN,
-            runname=runname,
-            optimizer_spec=optimizer_spec,
-            exploration=exploration_schedule,
-            stopping_criterion=stopping_criterion2(num_timesteps),
-            replay_buffer_size=REPLAY_BUFFER_SIZE,
-            batch_size=BATCH_SIZE,
-            gamma=GAMMA,
-            learning_starts=LEARNING_STARTS,
-            learning_freq=LEARNING_FREQ,
-            frame_history_len=FRAME_HISTORY_LEN,
-            target_update_freq=TARGET_UPDATE_FREQ
-        )
-
-
-def main(env, num_timesteps):
     optimizer_spec = OptimizerSpec(
         constructor=optim.RMSprop,
         kwargs=dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS),
@@ -159,7 +54,7 @@ def main(env, num_timesteps):
     dqn_learning(
         env=env,
         q_func=DQN,
-        runname="Normal_run",
+        runname="normal_run",
         optimizer_spec=optimizer_spec,
         exploration=exploration_schedule,
         stopping_criterion=stopping_criterion2(num_timesteps),
@@ -173,17 +68,89 @@ def main(env, num_timesteps):
     )
 
 
+def q2_run(num_timesteps):
+    schedulers = {"no_explore": ConstantSchedule(0.1),
+                  "delayed_decay": PiecewiseSchedule([(0, 1.0), (0.25e6, 1.0), (1.25e6, 0.1)], outside_value=0.1),
+                  "slower_decay": LinearSchedule(1500000, 0.1)}
+
+    for name, exploration_schedule in schedulers.items():
+        # Get Atari games.
+        benchmark = gym.benchmark_spec('Atari40M')
+
+        # Change the index to select a different game.
+        task = benchmark.tasks[3]
+
+        # Run training
+        seed = 0  # Use a seed of zero (you may want to randomize the seed!)
+        env = get_env(task, seed)
+        env.reset()
+
+        optimizer_spec = OptimizerSpec(constructor=optim.RMSprop, kwargs=dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS))
+
+        dqn_learning(
+            env=env,
+            q_func=DQN,
+            runname=name,
+            optimizer_spec=optimizer_spec,
+            exploration=exploration_schedule,
+            stopping_criterion=stopping_criterion2(num_timesteps),
+            replay_buffer_size=REPLAY_BUFFER_SIZE,
+            batch_size=BATCH_SIZE,
+            gamma=GAMMA,
+            learning_starts=LEARNING_STARTS,
+            learning_freq=LEARNING_FREQ,
+            frame_history_len=FRAME_HISTORY_LEN,
+            target_update_freq=TARGET_UPDATE_FREQ
+        )
+
+
+def bonus_run(num_timesteps):
+    def make_range_black(arr: np.ndarray, start, end):
+        arr[:, start:end, :] = 0
+
+    frame_filters = {"no_left_side": lambda x: make_range_black(x, 0, x.shape[1] // 4),
+                     "no_middle_side": lambda x: make_range_black(x, x.shape[1] // 4, x.shape[1] // 2), }
+
+    for name, frame_filter in frame_filters.items():
+        # Get Atari games.
+        benchmark = gym.benchmark_spec('Atari40M')
+
+        # Change the index to select a different game.
+        task = benchmark.tasks[3]
+
+        # Run training
+        seed = 0  # Use a seed of zero (you may want to randomize the seed!)
+        env = get_env(task, seed)
+        env.reset()
+
+        optimizer_spec = OptimizerSpec(constructor=optim.RMSprop, kwargs=dict(lr=LEARNING_RATE, alpha=ALPHA, eps=EPS))
+
+        dqn_learning(
+            env=env,
+            q_func=DQN,
+            runname=name,
+            frame_filter=frame_filter,
+            optimizer_spec=optimizer_spec,
+            exploration=LinearSchedule(1000000, 0.1),
+            stopping_criterion=stopping_criterion2(num_timesteps),
+            replay_buffer_size=REPLAY_BUFFER_SIZE,
+            batch_size=BATCH_SIZE,
+            gamma=GAMMA,
+            learning_starts=LEARNING_STARTS,
+            learning_freq=LEARNING_FREQ,
+            frame_history_len=FRAME_HISTORY_LEN,
+            target_update_freq=TARGET_UPDATE_FREQ
+        )
+
+
 if __name__ == '__main__':
-    # Get Atari games.
-    benchmark = gym.benchmark_spec('Atari40M')
+    if len(sys.argv) != 2:
+        raise ValueError("Should provide an argument for which part to run")
+    arg_run = sys.argv[1]
 
-    # Change the index to select a different game.
-    task = benchmark.tasks[3]
-
-    # Run training
-    seed = 0  # Use a seed of zero (you may want to randomize the seed!)
-    env = get_env(task, seed)
-
-    main(env, 2e6)
-
-    #test_scheduler_history(2e6)
+    if arg_run == "q1":
+        q1_run(4e6)
+    elif arg_run == "q2":
+        q2_run(3e6)
+    elif arg_run == "bonus":
+        bonus_run(3e6)
